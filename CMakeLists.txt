@@ -38,3 +38,19 @@ target_compile_options(
     PRIVATE
     ${LIBUSB_CFLAGS_OTHER}
 )
+
+add_executable(
+    capture
+    main.cpp
+
+    src/Device.cpp
+    src/Capture.cpp
+)
+
+target_include_directories(
+    capture
+    PRIVATE
+
+    .
+    ${LIBUSB_INCLUDE_DIRS}
+)
