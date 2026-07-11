@@ -13,44 +13,30 @@ add_executable(
     capture
     main.cpp
     src/Device.cpp
-)
-
-target_include_directories(
-    capture
-    PRIVATE
-    ${LIBUSB_INCLUDE_DIRS}
-)
-
-target_link_directories(
-    capture
-    PRIVATE
-    ${LIBUSB_LIBRARY_DIRS}
-)
-
-target_link_libraries(
-    capture
-    PRIVATE
-    ${LIBUSB_LIBRARIES}
-)
-
-target_compile_options(
-    capture
-    PRIVATE
-    ${LIBUSB_CFLAGS_OTHER}
-)
-
-add_executable(
-    capture
-    main.cpp
-
-    src/Device.cpp
     src/Capture.cpp
 )
 
 target_include_directories(
     capture
     PRIVATE
+        .
+        ${LIBUSB_INCLUDE_DIRS}
+)
 
-    .
-    ${LIBUSB_INCLUDE_DIRS}
+target_link_directories(
+    capture
+    PRIVATE
+        ${LIBUSB_LIBRARY_DIRS}
+)
+
+target_compile_options(
+    capture
+    PRIVATE
+        ${LIBUSB_CFLAGS_OTHER}
+)
+
+target_link_libraries(
+    capture
+    PRIVATE
+        ${LIBUSB_LIBRARIES}
 )
