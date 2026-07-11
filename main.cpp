@@ -6,6 +6,8 @@
 #include <iostream>
 #include <vector>
 
+#include "httplib.h"
+
 namespace {
 
 constexpr int POINTS_PER_CHANNEL = 0x2000; // 8192
