@@ -37,6 +37,5 @@ public:
 private:
     libusb_context* context = nullptr;
     libusb_device_handle* handle = nullptr;
-
     bool interfaceClaimed = false;
 };

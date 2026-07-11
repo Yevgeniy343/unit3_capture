@@ -7,10 +7,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 find_package(PkgConfig REQUIRED)
-
 pkg_check_modules(LIBUSB REQUIRED libusb-1.0)
-
-find_package(CURL REQUIRED)
 
 add_executable(
     capture
@@ -21,7 +18,6 @@ add_executable(
 target_include_directories(
     capture
     PRIVATE
-        .
         ${LIBUSB_INCLUDE_DIRS}
 )
 
@@ -41,5 +37,4 @@ target_link_libraries(
     capture
     PRIVATE
         ${LIBUSB_LIBRARIES}
-        CURL::libcurl
 )

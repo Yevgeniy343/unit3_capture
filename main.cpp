@@ -1,67 +1,99 @@
+#include "src/Commands.h"
 #include "src/Device.h"
 
+#include <cstdint>
 #include <iostream>
+#include <vector>
 
-using json = nlohmann::json;
+namespace {
+
+constexpr int POINTS_PER_CHANNEL = 0x2000; // 8192
+constexpr int CHANNELS = 2;
+
+constexpr int REQUESTED_BYTES =
+    POINTS_PER_CHANNEL * CHANNELS;
+
+} // namespace
+
 
 int main() {
-
     Device device;
 
     if (!device.open()) {
-        std::cerr << "Cannot open Hantek\n";
         return 1;
     }
 
-    Capture capture(device);
+    const auto startData =
+        HantekCommands::startSampling();
 
-    httplib::Server server;
+    if (
+        !device.controlWrite(
+            HantekCommands::START_SAMPLING,
+            0,
+            0,
+            startData.data(),
+            static_cast<std::uint16_t>(
+                startData.size()
+            )
+        )
+    ) {
+        std::cerr << "Failed to start sampling\n";
+        return 1;
+    }
 
-    server.Get("/health", [](const httplib::Request&, httplib::Response& res) {
-        res.set_content("OK", "text/plain");
-    });
+    std::vector<std::uint8_t> rawData;
+    int transferredLength = 0;
 
-    server.Get("/capture",
-        [&](const httplib::Request&, httplib::Response& res) {
-
-            CaptureFrame frame;
-
-            if (!capture.read(frame)) {
-
-                res.status = 500;
-
-                res.set_content(
-                    R"({"error":"capture failed"})",
-                    "application/json"
-                );
-
-                return;
-            }
-
-            json j;
-
-            j["sampleRate"] = frame.sampleRate;
-            j["points"] = frame.ch1.size();
-            j["ch1"] = frame.ch1;
-            j["ch2"] = frame.ch2;
-
-            res.set_content(
-                j.dump(),
-                "application/json"
-            );
-        }
+    const bool readSuccess = device.bulkRead(
+        rawData,
+        REQUESTED_BYTES,
+        transferredLength,
+        3000
     );
 
-    std::cout << std::endl;
-    std::cout << "======================================" << std::endl;
-    std::cout << " Hantek HTTP Server started" << std::endl;
-    std::cout << " http://127.0.0.1:8080" << std::endl;
-    std::cout << "======================================" << std::endl;
-    std::cout << std::endl;
+    const auto stopData =
+        HantekCommands::stopSampling();
 
-    server.listen("0.0.0.0", 8080);
+    const bool stopSuccess = device.controlWrite(
+        HantekCommands::START_SAMPLING,
+        0,
+        0,
+        stopData.data(),
+        static_cast<std::uint16_t>(
+            stopData.size()
+        )
+    );
 
-    device.close();
+    if (!stopSuccess) {
+        std::cerr << "Failed to stop sampling\n";
+    }
+
+    if (!readSuccess) {
+        return 1;
+    }
+
+    if (transferredLength != REQUESTED_BYTES) {
+        std::cerr
+            << "Unexpected data size: "
+            << transferredLength
+            << ", expected "
+            << REQUESTED_BYTES
+            << '\n';
+
+        return 1;
+    }
+
+    std::cout.write(
+        reinterpret_cast<const char*>(rawData.data()),
+        static_cast<std::streamsize>(rawData.size())
+    );
+
+    std::cout.flush();
+
+    if (!std::cout) {
+        std::cerr << "Failed to write capture data to stdout\n";
+        return 1;
+    }
 
     return 0;
 }
