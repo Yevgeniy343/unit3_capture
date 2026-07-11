@@ -21,8 +21,6 @@ int main() {
 
     httplib::Server server;
 
-    server.set_compress(true);
-
     server.Get("/health", [](const httplib::Request&, httplib::Response& res) {
         res.set_content("OK", "text/plain");
     });
