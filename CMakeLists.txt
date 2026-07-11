@@ -7,13 +7,15 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 find_package(PkgConfig REQUIRED)
+
 pkg_check_modules(LIBUSB REQUIRED libusb-1.0)
+
+find_package(CURL REQUIRED)
 
 add_executable(
     capture
     main.cpp
     src/Device.cpp
-    src/Capture.cpp
 )
 
 target_include_directories(
@@ -39,4 +41,5 @@ target_link_libraries(
     capture
     PRIVATE
         ${LIBUSB_LIBRARIES}
+        CURL::libcurl
 )

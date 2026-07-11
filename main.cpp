@@ -2,7 +2,6 @@
 #include "nlohmann/json.hpp"
 
 #include "src/Device.h"
-#include "src/Capture.h"
 
 #include <iostream>
 
