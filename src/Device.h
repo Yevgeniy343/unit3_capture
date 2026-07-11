@@ -1,6 +1,8 @@
 #pragma once
 
 #include <cstdint>
+#include <vector>
+
 #include <libusb-1.0/libusb.h>
 
 class Device {
@@ -8,8 +10,6 @@ public:
     Device();
     ~Device();
 
-    // Запрещаем случайное копирование объекта,
-    // поскольку он владеет USB handle.
     Device(const Device&) = delete;
     Device& operator=(const Device&) = delete;
 
@@ -25,6 +25,13 @@ public:
         const std::uint8_t* data,
         std::uint16_t length,
         unsigned int timeoutMs = 1000
+    );
+
+    bool bulkRead(
+        std::vector<std::uint8_t>& buffer,
+        int requestedLength,
+        int& transferredLength,
+        unsigned int timeoutMs = 3000
     );
 
 private:

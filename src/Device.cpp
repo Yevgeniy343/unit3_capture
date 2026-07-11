@@ -1,17 +1,23 @@
 #include "Device.h"
 
+#include <iomanip>
 #include <iostream>
 
 namespace {
 
-constexpr std::uint16_t VENDOR_ID = 0x04B5;
 constexpr std::uint16_t PRODUCT_ID = 0x6022;
 
+// Устройство может иметь один из этих VID
+// в зависимости от загруженной прошивки.
+constexpr std::uint16_t VENDOR_ID_NO_FIRMWARE = 0x04B4;
+constexpr std::uint16_t VENDOR_ID_FIRMWARE = 0x04B5;
 
 constexpr int INTERFACE_NUMBER = 0;
 
-// Host -> Device, Vendor, Device recipient
 constexpr std::uint8_t REQUEST_TYPE_VENDOR_OUT = 0x40;
+
+// Bulk IN endpoint осциллографа.
+constexpr unsigned char BULK_ENDPOINT_IN = 0x86;
 
 } // namespace
 
@@ -25,8 +31,7 @@ Device::~Device() {
 
 
 bool Device::open() {
-    // Не открываем устройство второй раз.
-    if (handle != nullptr) {
+    if (isOpen()) {
         return true;
     }
 
@@ -42,16 +47,26 @@ bool Device::open() {
         return false;
     }
 
+    // Сначала ищем устройство с загруженной прошивкой.
     handle = libusb_open_device_with_vid_pid(
         context,
-        VENDOR_ID,
+        VENDOR_ID_FIRMWARE,
         PRODUCT_ID
     );
+
+    // Если не нашли, проверяем исходный VID.
+    if (handle == nullptr) {
+        handle = libusb_open_device_with_vid_pid(
+            context,
+            VENDOR_ID_NO_FIRMWARE,
+            PRODUCT_ID
+        );
+    }
 
     if (handle == nullptr) {
         std::cerr
             << "Hantek DSO-6022BE not found "
-            << "(VID=0x04B4, PID=0x6022)"
+            << "(expected 04b4:6022 or 04b5:6022)"
             << '\n';
 
         libusb_exit(context);
@@ -62,8 +77,6 @@ bool Device::open() {
 
     std::cout << "Hantek found\n";
 
-    // Если устройство неожиданно занято драйвером ядра,
-    // пробуем его временно отсоединить.
     const int kernelDriverActive =
         libusb_kernel_driver_active(handle, INTERFACE_NUMBER);
 
@@ -71,7 +84,10 @@ bool Device::open() {
         std::cout << "Detaching kernel driver...\n";
 
         const int detachResult =
-            libusb_detach_kernel_driver(handle, INTERFACE_NUMBER);
+            libusb_detach_kernel_driver(
+                handle,
+                INTERFACE_NUMBER
+            );
 
         if (
             detachResult != LIBUSB_SUCCESS &&
@@ -88,7 +104,10 @@ bool Device::open() {
     }
 
     const int claimResult =
-        libusb_claim_interface(handle, INTERFACE_NUMBER);
+        libusb_claim_interface(
+            handle,
+            INTERFACE_NUMBER
+        );
 
     if (claimResult != LIBUSB_SUCCESS) {
         std::cerr
@@ -164,8 +183,6 @@ bool Device::controlWrite(
         return false;
     }
 
-    // libusb_control_transfer принимает неконстантный указатель,
-    // хотя для OUT-запроса библиотека данные не изменяет.
     auto* mutableData =
         const_cast<unsigned char*>(data);
 
@@ -213,6 +230,78 @@ bool Device::controlWrite(
         << std::dec
         << ", bytes="
         << transferred
+        << '\n';
+
+    return true;
+}
+
+
+bool Device::bulkRead(
+    std::vector<std::uint8_t>& buffer,
+    int requestedLength,
+    int& transferredLength,
+    unsigned int timeoutMs
+) {
+    transferredLength = 0;
+
+    if (!isOpen()) {
+        std::cerr
+            << "bulkRead failed: USB device is not open"
+            << '\n';
+
+        return false;
+    }
+
+    if (requestedLength <= 0) {
+        std::cerr
+            << "bulkRead failed: requested length must be positive"
+            << '\n';
+
+        return false;
+    }
+
+    buffer.assign(
+        static_cast<std::size_t>(requestedLength),
+        0
+    );
+
+    const int result = libusb_bulk_transfer(
+        handle,
+        BULK_ENDPOINT_IN,
+        buffer.data(),
+        requestedLength,
+        &transferredLength,
+        timeoutMs
+    );
+
+    if (result != LIBUSB_SUCCESS) {
+        std::cerr
+            << "Bulk read failed: "
+            << libusb_error_name(result)
+            << ", received before error: "
+            << transferredLength
+            << " bytes"
+            << '\n';
+
+        buffer.resize(
+            static_cast<std::size_t>(
+                transferredLength > 0
+                    ? transferredLength
+                    : 0
+            )
+        );
+
+        return false;
+    }
+
+    buffer.resize(
+        static_cast<std::size_t>(transferredLength)
+    );
+
+    std::cout
+        << "Bulk read OK: "
+        << transferredLength
+        << " bytes"
         << '\n';
 
     return true;
