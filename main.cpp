@@ -1,3 +1,10 @@
+#include "src/Commands.h"
+#include "src/Device.h"
+
+#include <cstdint>
+#include <iostream>
+#include <vector>
+
 int main() {
     Device device;
 
@@ -19,14 +26,14 @@ int main() {
                 0,
                 0,
                 startData.data(),
-                startData.size())) {
+                static_cast<std::uint16_t>(startData.size()))) {
 
             std::cout << "START failed on frame " << frame << std::endl;
             break;
         }
 
         // READ
-        std::vector<uint8_t> rawData;
+        std::vector<std::uint8_t> rawData;
         int transferred = 0;
 
         if (!device.bulkRead(
@@ -47,7 +54,7 @@ int main() {
                 0,
                 0,
                 stopData.data(),
-                stopData.size())) {
+                static_cast<std::uint16_t>(stopData.size()))) {
 
             std::cout << "STOP failed on frame " << frame << std::endl;
             break;
@@ -56,7 +63,7 @@ int main() {
         std::cout
             << "Frame "
             << frame
-            << "  bytes="
+            << "   bytes="
             << transferred
             << std::endl;
     }
