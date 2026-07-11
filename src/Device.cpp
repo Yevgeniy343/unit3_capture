@@ -4,7 +4,7 @@
 
 namespace {
 
-constexpr std::uint16_t VENDOR_ID = 0x04B4;
+constexpr std::uint16_t VENDOR_ID = 0x04B5;
 constexpr std::uint16_t PRODUCT_ID = 0x6022;
 
 constexpr int INTERFACE_NUMBER = 0;
