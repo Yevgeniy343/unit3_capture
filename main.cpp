@@ -1,6 +1,3 @@
-#include "httplib.h"
-#include "nlohmann/json.hpp"
-
 #include "src/Device.h"
 
 #include <iostream>
