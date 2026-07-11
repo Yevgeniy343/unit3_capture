@@ -1,151 +1,163 @@
 #include "src/Commands.h"
 #include "src/Device.h"
 
-#include <SFML/Graphics.hpp>
-
 #include <algorithm>
 #include <cstdint>
 #include <iostream>
 #include <vector>
 
-constexpr int POINTS_PER_CHANNEL = 0x2000;
+namespace {
+
+constexpr int POINTS_PER_CHANNEL = 0x2000; // 8192
 constexpr int CHANNELS = 2;
-constexpr int REQUESTED_BYTES = POINTS_PER_CHANNEL * CHANNELS;
+
+// В потоке данные чередуются:
+//
+// CH1, CH2, CH1, CH2...
+constexpr int REQUESTED_BYTES =
+    POINTS_PER_CHANNEL * CHANNELS;
+
+void printFirstValues(
+    const std::vector<std::uint8_t>& values,
+    std::size_t count
+) {
+    const std::size_t valuesToPrint =
+        std::min(count, values.size());
+
+    for (std::size_t i = 0; i < valuesToPrint; ++i) {
+        if (i > 0) {
+            std::cout << ", ";
+        }
+
+        std::cout
+            << static_cast<unsigned int>(values[i]);
+    }
+
+    std::cout << '\n';
+}
+
+} // namespace
+
 
 int main() {
-
     Device device;
 
     if (!device.open()) {
         return 1;
     }
 
-    sf::RenderWindow window(
-        sf::VideoMode(1400, 700),
-        "Hantek 6022"
-    );
+    const auto startData =
+        HantekCommands::startSampling();
 
-    window.setFramerateLimit(60);
-
-    std::vector<std::uint8_t> rawData;
-    std::vector<std::uint8_t> ch1;
-
-    rawData.reserve(REQUESTED_BYTES);
-    ch1.reserve(POINTS_PER_CHANNEL);
-
-    sf::VertexArray waveform(sf::LineStrip, POINTS_PER_CHANNEL);
-
-    while (window.isOpen()) {
-
-        sf::Event event;
-
-        while (window.pollEvent(event)) {
-
-            if (event.type == sf::Event::Closed)
-                window.close();
-        }
-
-        //----------------------------------------
-        // START
-        //----------------------------------------
-
-        const auto startData =
-            HantekCommands::startSampling();
-
-        if (!device.controlWrite(
-                HantekCommands::START_SAMPLING,
-                0,
-                0,
-                startData.data(),
-                startData.size())) {
-
-            continue;
-        }
-
-        //----------------------------------------
-        // READ
-        //----------------------------------------
-
-        int transferred = 0;
-
-        if (!device.bulkRead(
-                rawData,
-                REQUESTED_BYTES,
-                transferred,
-                3000)) {
-
-            continue;
-        }
-
-        //----------------------------------------
-        // STOP
-        //----------------------------------------
-
-        const auto stopData =
-            HantekCommands::stopSampling();
-
-        device.controlWrite(
+    if (
+        !device.controlWrite(
             HantekCommands::START_SAMPLING,
             0,
             0,
-            stopData.data(),
-            stopData.size()
-        );
-
-        //----------------------------------------
-        // CH1
-        //----------------------------------------
-
-        ch1.clear();
-
-        for (
-            std::size_t i = 0;
-            i + 1 < rawData.size();
-            i += 2
-        ) {
-            ch1.push_back(rawData[i]);
-        }
-
-        //----------------------------------------
-        // DRAW
-        //----------------------------------------
-
-        window.clear(sf::Color::Black);
-
-        const float width =
-            static_cast<float>(window.getSize().x);
-
-        const float height =
-            static_cast<float>(window.getSize().y);
-
-        const float dx =
-            width / static_cast<float>(POINTS_PER_CHANNEL);
-
-        for (
-            std::size_t i = 0;
-            i < ch1.size();
-            i++
-        ) {
-
-            float x =
-                static_cast<float>(i) * dx;
-
-            float y =
-                height -
-                (
-                    static_cast<float>(ch1[i]) / 255.0f
-                ) * height;
-
-            waveform[i].position = {x, y};
-
-            waveform[i].color = sf::Color::Green;
-        }
-
-        window.draw(waveform);
-                window.display();
+            startData.data(),
+            static_cast<std::uint16_t>(
+                startData.size()
+            )
+        )
+    ) {
+        std::cerr << "Failed to start sampling\n";
+        return 1;
     }
 
-    device.close();
+    std::cout << "Sampling started\n";
+
+    std::vector<std::uint8_t> rawData;
+    int transferredLength = 0;
+
+    const bool readSuccess = device.bulkRead(
+        rawData,
+        REQUESTED_BYTES,
+        transferredLength,
+        3000
+    );
+
+    // Останавливаем выборку независимо от результата чтения.
+    const auto stopData =
+        HantekCommands::stopSampling();
+
+    const bool stopSuccess = device.controlWrite(
+        HantekCommands::START_SAMPLING,
+        0,
+        0,
+        stopData.data(),
+        static_cast<std::uint16_t>(
+            stopData.size()
+        )
+    );
+
+    if (stopSuccess) {
+        std::cout << "Sampling stopped\n";
+    } else {
+        std::cerr << "Failed to stop sampling\n";
+    }
+
+    if (!readSuccess) {
+        return 1;
+    }
+
+    std::vector<std::uint8_t> channel1;
+    std::vector<std::uint8_t> channel2;
+
+    channel1.reserve(
+        rawData.size() / 2
+    );
+
+    channel2.reserve(
+        rawData.size() / 2
+    );
+
+    for (
+        std::size_t index = 0;
+        index + 1 < rawData.size();
+        index += 2
+    ) {
+        channel1.push_back(rawData[index]);
+        channel2.push_back(rawData[index + 1]);
+    }
+
+    std::cout
+        << "Raw bytes: "
+        << rawData.size()
+        << '\n';
+
+    std::cout
+        << "CH1 points: "
+        << channel1.size()
+        << '\n';
+
+    std::cout
+        << "CH2 points: "
+        << channel2.size()
+        << '\n';
+
+    std::cout << "CH1 first 20: ";
+    printFirstValues(channel1, 20);
+
+    std::cout << "CH2 first 20: ";
+    printFirstValues(channel2, 20);
+
+    if (!channel1.empty()) {
+        const auto [minimum, maximum] =
+            std::minmax_element(
+                channel1.begin(),
+                channel1.end()
+            );
+
+        std::cout
+            << "CH1 min: "
+            << static_cast<unsigned int>(*minimum)
+            << '\n';
+
+        std::cout
+            << "CH1 max: "
+            << static_cast<unsigned int>(*maximum)
+            << '\n';
+    }
 
     return 0;
 }
